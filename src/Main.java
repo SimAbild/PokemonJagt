@@ -16,8 +16,15 @@ public class Main {
         starterForest.addPokemon(new Pokemon("Jolteon","Electric", 10));
 
 
+
         // Vis alle Pokémoner i skoven
         forest.showAllPokemon();
+
+        //Vis alle Pokemoner i bjerget
+        starterForest.showAllPokemon();
+
+        //
+
 
         // Opret en træner
         Trainer ash = new Trainer("Ash");
@@ -32,7 +39,12 @@ public class Main {
         ash.searchForPokemon(forest, "name", "Mewtwo");
 
 
-        ash.searchForPokemon(starterForest,"name","Aggron");
-        ash.searchForPokemon(starterForest,"type","Flying");
+
+
+        System.out.println("\n Vis alle pokemonner");
+
+        // Kalder den nye metode for at vise Pokémoner fra begge områder
+        Area.showAllPokemonFromAreas(forest, starterForest);
+
     }
 }

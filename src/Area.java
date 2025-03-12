@@ -30,4 +30,11 @@ public class Area {
         }
         return null;
     }
+
+    // **Ny metode for at vise alle Pokémoner fra to områder**
+    public static void showAllPokemonFromAreas(Area area1, Area area2) {
+        System.out.println("\nAlle Pokémoner fra begge områder:");
+        area1.showAllPokemon();
+        area2.showAllPokemon();
+    }
 }
