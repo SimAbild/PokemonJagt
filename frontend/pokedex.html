@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PokemonJagt — Pokédex</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f4f8; margin: 0; }
+        header {
+            background: #e63946;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header a { color: white; text-decoration: none; margin-left: 1.5rem; font-weight: bold; }
+        header a:hover { text-decoration: underline; }
+        main { padding: 2rem; max-width: 900px; margin: 0 auto; }
+        h2 { color: #333; }
+        p.subtitle { color: #666; margin-bottom: 1.5rem; }
+
+        /* Pokemon grid — same layout as the team grid on the dashboard */
+        .pokemon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 1rem;
+        }
+        .pokemon-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        .pokemon-card img { width: 80px; height: 80px; }
+        .pokemon-card h3 { margin: 0.5rem 0 0.2rem; font-size: 1rem; }
+        .pokemon-card p  { margin: 0.2rem 0; font-size: 0.85rem; color: #666; }
+        .catch-button {
+            margin-top: 0.7rem;
+            background: #e63946;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .catch-button:hover { background: #c1121f; }
+        .catch-button:disabled { background: #ccc; cursor: default; }
+        .caught-confirmation-label {
+            margin-top: 0.7rem;
+            color: #2a9d8f;
+            font-weight: bold;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <strong>Pokédex</strong>
+    <nav>
+        <a href="dashboard.html">My Team</a>
+        <a href="#" onclick="logoutAndReturnToLogin()">Logout</a>
+    </nav>
+</header>
+
+<main>
+    <h2>All Available Pokemon</h2>
+    <p class="subtitle">Click "Catch!" to add a Pokemon to your team. You can catch duplicates.</p>
+    <div id="pokedexGrid" class="pokemon-grid"></div>
+</main>
+
+<script src="js/app.js"></script>
+<script>
+
+    // Load and display the full Pokedex as soon as the page opens
+    loadAndDisplayPokedex();
+
+    async function loadAndDisplayPokedex() {
+        const pokedexResponse = await callAuthenticatedApi('/api/pokedex');
+        if (!pokedexResponse) return; // User was not authenticated — redirected to login
+
+        const allPokemon = await pokedexResponse.json();
+        const pokedexGrid = document.getElementById('pokedexGrid');
+
+        allPokemon.forEach(pokemon => {
+            pokedexGrid.appendChild(buildPokedexCard(pokemon));
+        });
+    }
+
+    function buildPokedexCard(pokemon) {
+        const card = document.createElement('div');
+        card.className = 'pokemon-card';
+        card.innerHTML = `
+            <img src="${pokemon.sprite_url}" alt="${pokemon.name}" />
+            <h3>#${pokemon.id} ${pokemon.name}</h3>
+            <p>Type: ${pokemon.type}</p>
+            <button class="catch-button" onclick="catchPokemon(${pokemon.id}, this)">
+                Catch!
+            </button>
+        `;
+        return card;
+    }
+
+    async function catchPokemon(pokedexId, catchButton) {
+        // Disable the button immediately to prevent double-clicks
+        catchButton.disabled = true;
+        catchButton.textContent = 'Catching...';
+
+        const response = await callAuthenticatedApi(`/api/trainer/team/${pokedexId}`, 'POST');
+
+        if (response && response.ok) {
+            // Replace the button with a confirmation label so the trainer knows it worked
+            catchButton.outerHTML = '<p class="caught-confirmation-label">Added to team!</p>';
+        } else {
+            // Re-enable the button so the trainer can try again
+            catchButton.disabled = false;
+            catchButton.textContent = 'Catch!';
+            alert('Could not catch this Pokemon. Make sure you have a trainer profile on your dashboard.');
+        }
+    }
+
+    function logoutAndReturnToLogin() {
+        clearJwtAndRedirectToLogin();
+    }
+
+</script>
+</body>
+</html>

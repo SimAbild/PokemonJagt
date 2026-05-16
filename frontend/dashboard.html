@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PokemonJagt — Dashboard</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f4f8; margin: 0; }
+        header {
+            background: #e63946;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header a { color: white; text-decoration: none; margin-left: 1.5rem; font-weight: bold; }
+        header a:hover { text-decoration: underline; }
+        main { padding: 2rem; max-width: 900px; margin: 0 auto; }
+        h2 { color: #333; }
+
+        /* Trainer profile card */
+        .trainer-profile-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-bottom: 2rem;
+        }
+        .trainer-profile-card h2 { margin-top: 0; color: #e63946; }
+        .trainer-profile-card p { margin: 0.3rem 0; color: #555; }
+
+        /* Pokemon team grid */
+        .pokemon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 1rem;
+        }
+        .pokemon-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        .pokemon-card img { width: 80px; height: 80px; }
+        .pokemon-card h3 { margin: 0.5rem 0 0.2rem; font-size: 1rem; }
+        .pokemon-card p  { margin: 0.2rem 0; font-size: 0.85rem; color: #666; }
+        .release-button {
+            margin-top: 0.7rem;
+            background: #adb5bd;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .release-button:hover { background: #6c757d; }
+
+        /* Create profile form */
+        .create-profile-form {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            max-width: 400px;
+        }
+        label { font-size: 0.9rem; font-weight: bold; display: block; margin-bottom: 0.3rem; }
+        input, select {
+            width: 100%;
+            padding: 0.6rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        .primary-button {
+            background: #e63946;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.7rem 1.4rem;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .primary-button:hover { background: #c1121f; }
+        .pokedex-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            color: #e63946;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .pokedex-link:hover { text-decoration: underline; }
+        .empty-team-message { color: #888; font-style: italic; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <strong>PokemonJagt</strong>
+    <nav>
+        <a href="pokedex.html">Pokédex</a>
+        <a href="#" onclick="logoutAndReturnToLogin()">Logout</a>
+    </nav>
+</header>
+
+<main>
+
+    <!-- Shown when the user has never created a trainer profile -->
+    <div id="createProfileSection" class="hidden">
+        <h2>Welcome! Create your trainer profile</h2>
+        <div class="create-profile-form">
+            <label for="trainerNameInput">Trainer Name</label>
+            <input id="trainerNameInput" type="text" placeholder="e.g. Ash" />
+
+            <label for="trainerGenderSelect">Gender</label>
+            <select id="trainerGenderSelect">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+            </select>
+
+            <button class="primary-button" onclick="submitCreateTrainerProfile()">
+                Start your journey!
+            </button>
+        </div>
+    </div>
+
+    <!-- Shown when the trainer profile exists -->
+    <div id="trainerDashboardSection" class="hidden">
+
+        <div class="trainer-profile-card">
+            <h2 id="trainerNameDisplay"></h2>
+            <p><strong>Gender:</strong> <span id="trainerGenderDisplay"></span></p>
+            <p><strong>Trainer since:</strong> <span id="trainerCreatedAtDisplay"></span></p>
+        </div>
+
+        <h2>My Pokemon Team</h2>
+        <a href="pokedex.html" class="pokedex-link">+ Catch more Pokemon in the Pokédex</a>
+
+        <div id="pokemonTeamGrid" class="pokemon-grid"></div>
+        <p id="emptyTeamMessage" class="empty-team-message hidden">
+            Your team is empty. Head to the Pokédex to catch some Pokemon!
+        </p>
+
+    </div>
+
+</main>
+
+<script src="js/app.js"></script>
+<script>
+
+    // Load the dashboard as soon as the page opens
+    loadDashboard();
+
+    async function loadDashboard() {
+        const profileResponse = await callAuthenticatedApi('/api/trainer');
+        if (!profileResponse) return; // callAuthenticatedApi already redirected to login
+
+        if (profileResponse.status === 404) {
+            // This user has not created a trainer profile yet — show the creation form
+            document.getElementById('createProfileSection').classList.remove('hidden');
+            return;
+        }
+
+        const trainerProfile = await profileResponse.json();
+        showTrainerProfile(trainerProfile);
+        await loadAndDisplayPokemonTeam();
+    }
+
+    function showTrainerProfile(trainerProfile) {
+        document.getElementById('trainerDashboardSection').classList.remove('hidden');
+        document.getElementById('trainerNameDisplay').textContent    = trainerProfile.name;
+        document.getElementById('trainerGenderDisplay').textContent  = trainerProfile.gender;
+        document.getElementById('trainerCreatedAtDisplay').textContent =
+            new Date(trainerProfile.created_at).toLocaleDateString();
+    }
+
+    async function loadAndDisplayPokemonTeam() {
+        const teamResponse = await callAuthenticatedApi('/api/trainer/team');
+        if (!teamResponse) return;
+
+        const pokemonTeam = await teamResponse.json();
+        const teamGrid    = document.getElementById('pokemonTeamGrid');
+
+        // Clear the grid before re-rendering (used both on load and after releasing a Pokemon)
+        teamGrid.innerHTML = '';
+
+        if (pokemonTeam.length === 0) {
+            document.getElementById('emptyTeamMessage').classList.remove('hidden');
+            return;
+        }
+
+        document.getElementById('emptyTeamMessage').classList.add('hidden');
+        pokemonTeam.forEach(pokemon => teamGrid.appendChild(buildPokemonTeamCard(pokemon)));
+    }
+
+    function buildPokemonTeamCard(pokemon) {
+        // Use the nickname if the trainer gave one, otherwise show the species name
+        const displayName = pokemon.nickname || pokemon.pokemon_name;
+
+        const card = document.createElement('div');
+        card.className = 'pokemon-card';
+        card.innerHTML = `
+            <img src="${pokemon.sprite_url}" alt="${pokemon.pokemon_name}" />
+            <h3>${displayName}</h3>
+            <p>Type: ${pokemon.pokemon_type}</p>
+            <p>Level: ${pokemon.level}</p>
+            <button class="release-button"
+                    onclick="releasePokemonFromTeam('${pokemon.caught_pokemon_id}')">
+                Release
+            </button>
+        `;
+        return card;
+    }
+
+    async function submitCreateTrainerProfile() {
+        const trainerName = document.getElementById('trainerNameInput').value.trim();
+        const gender      = document.getElementById('trainerGenderSelect').value;
+
+        if (!trainerName) {
+            alert('Please enter a trainer name.');
+            return;
+        }
+
+        const response = await callAuthenticatedApi('/api/trainer', 'POST', { name: trainerName, gender });
+
+        if (response && response.ok) {
+            const createdProfile = await response.json();
+            document.getElementById('createProfileSection').classList.add('hidden');
+            showTrainerProfile(createdProfile);
+            await loadAndDisplayPokemonTeam();
+        }
+    }
+
+    async function releasePokemonFromTeam(caughtPokemonId) {
+        if (!confirm('Are you sure you want to release this Pokemon?')) return;
+
+        const response = await callAuthenticatedApi(`/api/trainer/team/${caughtPokemonId}`, 'DELETE');
+
+        if (response && response.ok) {
+            // Reload the team grid to reflect the change
+            await loadAndDisplayPokemonTeam();
+        }
+    }
+
+    function logoutAndReturnToLogin() {
+        clearJwtAndRedirectToLogin();
+    }
+
+</script>
+</body>
+</html>
