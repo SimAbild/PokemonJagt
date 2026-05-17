@@ -4,7 +4,10 @@
       "mcp__claude_ai_Supabase__get_project",
       "mcp__claude_ai_Supabase__get_logs",
       "mcp__claude_ai_Supabase__list_tables",
-      "mcp__claude_ai_Supabase__apply_migration"
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\simon\\\\IdeaProjects\\\\PokemonJagt\\\\backend\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object FullName)",
+      "WebFetch(domain:supabase.com)"
     ]
   }
 }
