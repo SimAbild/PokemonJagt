@@ -56,6 +56,10 @@ public class JwtInterceptor implements HandlerInterceptor {
                              HttpServletResponse response,
                              Object handler) throws Exception {
 
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
         String authorizationHeader = request.getHeader("Authorization");
 
         // Supabase sends tokens in the format: "Bearer <token>"

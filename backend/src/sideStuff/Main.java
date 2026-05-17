@@ -1,3 +1,5 @@
+package sideStuff;
+
 public class Main {
     public static void main(String[] args) {
         // Opret skoven og tilføj Pokémoner

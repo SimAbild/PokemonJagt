@@ -1,3 +1,5 @@
+package sideStuff;
+
 public class Trainer {
     private String name;
 

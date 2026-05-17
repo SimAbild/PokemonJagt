@@ -4,6 +4,7 @@ import com.pokemonjagt.service.AuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 
 import java.util.Map;
 
@@ -33,6 +34,12 @@ public class AuthController {
      */
     @ExceptionHandler(HttpClientErrorException.class)
     public ResponseEntity<String> handleSupabaseAuthError(HttpClientErrorException supabaseError) {
+        return ResponseEntity.status(supabaseError.getStatusCode())
+                .body(supabaseError.getResponseBodyAsString());
+    }
+
+    @ExceptionHandler(HttpServerErrorException.class)
+    public ResponseEntity<String> handleSupabaseServerError(HttpServerErrorException supabaseError) {
         return ResponseEntity.status(supabaseError.getStatusCode())
                 .body(supabaseError.getResponseBodyAsString());
     }

@@ -1,3 +1,5 @@
+package sideStuff;
+
 import java.util.ArrayList;
 
 public class Forest extends Area {
