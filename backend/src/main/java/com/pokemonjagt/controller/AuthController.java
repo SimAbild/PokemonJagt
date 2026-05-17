@@ -3,6 +3,7 @@ package com.pokemonjagt.controller;
 import com.pokemonjagt.service.AuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.Map;
 
@@ -23,6 +24,17 @@ public class AuthController {
 
     public AuthController(AuthService authService) {
         this.authService = authService;
+    }
+
+    /**
+     * Catches errors that Supabase sends back (e.g. wrong password, email already in use).
+     * Without this, RestTemplate would throw an exception that becomes a confusing 500 error.
+     * Instead we forward Supabase's original status code so the frontend knows what went wrong.
+     */
+    @ExceptionHandler(HttpClientErrorException.class)
+    public ResponseEntity<String> handleSupabaseAuthError(HttpClientErrorException supabaseError) {
+        return ResponseEntity.status(supabaseError.getStatusCode())
+                .body(supabaseError.getResponseBodyAsString());
     }
 
     /**

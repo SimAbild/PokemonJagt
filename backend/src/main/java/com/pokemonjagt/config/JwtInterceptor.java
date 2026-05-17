@@ -9,12 +9,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.net.URI;
 import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.PublicKey;
-import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
@@ -127,7 +127,11 @@ public class JwtInterceptor implements HandlerInterceptor {
         String jwksEndpointUrl = supabaseUrl + "/auth/v1/.well-known/jwks.json";
 
         // Fetch the raw JWKS JSON from Supabase (e.g. {"keys":[{"kty":"EC","crv":"P-256","x":"...","y":"..."}]})
-        String jwksJson = new String(URI.create(jwksEndpointUrl).toURL().openStream().readAllBytes());
+        // try-with-resources ensures the connection is closed after reading
+        String jwksJson;
+        try (InputStream jwksStream = URI.create(jwksEndpointUrl).toURL().openStream()) {
+            jwksJson = new String(jwksStream.readAllBytes());
+        }
 
         Map<String, Object> jwks = jsonParser.readValue(jwksJson, Map.class);
         List<Map<String, Object>> keys = (List<Map<String, Object>>) jwks.get("keys");
