@@ -1,0 +1,91 @@
+﻿Tutorial Spring Security med JWT. Kap3.
+Programmering 2, 3. semester KEA, efterår 2024.
+Her er nogle screendumps af test af koden i:
+https://github.com/ERLMKea/SpringSecurityKap123A
+Kør ovenstående Spring projekt. 
+Start Postman.
+Først opret 3 brugere. Lone som Admin, Jens og Lars som User.
+
+
+
+
+
+
+
+
+Fortsæt med at have backend spring kørende. Login som lone.
+Det gøres ved at vælge Authorization faneblad foroven, under Post dologin url.
+Vælg Basic Auth fra drop down. Indtast username: lone og password: 1234. Tryk Send.
+
+
+Vi har kaldt vores dologin endpoint. Backend har sikret lone og password er korrekt. JWTTokenGenerator er kørt. Vi har fået et jwt token i vores Headers i response. Se Headers(15) faneblad forneden over Du er logget på. 
+
+
+JWT token er highlighted.
+Vi kan prøve at copy paste det ind på jwt.io hjemmesiden.
+
+
+Vi kan se vi har fået genereret et korrekt JWT. Med bl.a. username og authorities.
+
+Jens kan tilgå myBalance fordi han er USER, men ikke myAccount, det er kun lone der kan.
+Lige nu er vi logget ind som lone, vi kan prøve at kalde myAccount. 
+Vi skal indsætte/kopierer vores nye JWT fra vores respond header til request header.
+Kopier fra respond header, som vi lige gjorde i ovenstående.
+
+Indæst i request header.
+Først opret/vælg Get myAccount end point i Postman.
+
+
+Så vælg Headers foroven. Kopier JWT ind i feltet til højre for Authorization.
+
+IGNORER indholdet af Authorization fanebladet, det bruges ikke.
+
+Ovenstående Auth Type, bruger vi ikke, da vi selv kopierer ind i Authorization feltet i Headers.
+Nu kan vi prøve at login som jens.
+
+Så kalde myBalance som jens godt må tilgå.
+
+Først kopier JWT fra Authorization.
+
+Hvis der ikke er et Authorization felt under Headers, så opretter man bare et. 
+
+Bemærk også der må ikke være lille linjeskift pil ikon i toppen af jwt. Den skal slettes.
+
+
+
+
+
+Vi har kaldt myAccount, men er logget ind som jens, bruger jwt som vi fik da vi loggede ind som jens. Jens kan ikke tilgå myAccount, så vi får 401 kode tilbage.
+Til sidst kan vi lige debug lidt.
+Sæt breakpoint i JWTTokenGenerator.
+
+Start i debug mode.
+Login som jens fra Postman.
+Vi kan se vi får genereret vores jwt.
+
+
+I Postman kopier igen vores nye jwt til get myAccount
+
+Set breakpoint i validatetoken filter.
+
+
+Tryk Send i postman.
+Vi kan se vores validatefilter metode har modtage et jwt fra Postman.
+
+I debugger kan vi se at vi har udpakket jwt, username er jens og authorities er ROLE_USER.
+
+
+Så validate filter går godt. Men jens har stadig ikke adgang til myAccount
+
+
+
+
+
+
+
+Forfattere: erlm10-12-2020   1
+
+
+
+
+

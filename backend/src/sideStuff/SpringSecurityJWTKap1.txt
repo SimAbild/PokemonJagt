@@ -1,0 +1,429 @@
+﻿Tutorial Spring Security med JWT
+Programmering 2, 3. semester KEA, forår 2025.
+
+Dette dokument er en step by step tutorial til en indføring i Spring Security og JWT. 
+Dette første kapitel, starter med at beskrive Spring Security med fokus på user og password gemt i sql database, ikke noget JWT.
+
+Vi springer lige ud i det og starter et nyt Spring projekt.
+
+
+
+
+Tilvælg følgende (og husk nu vælg Maven på første side).
+
+Jeg får sjovt nok et lille benspænd her, cannot resolve org.springframework osv.
+Jeg trykker på det blå link: try run maven import with. Bare endnu et eksempel på at tingene ændrer sig hele tiden i Spring Boot. Hvilket som sådan er et godt tegn, det er et, levende miljø.
+
+Nu har jeg et nyt Spring Boot projekt som vi kender det. Opret en ny package og kald den controller. Opret en ny klasse og kald den HelloWorld. 
+
+Prøv at køre. Prøv at taste http://localhost:8080/test ind i en browser.
+I skulle gerne få det her skærmbillede.
+
+Det betyder at Spring Security er slået til. Username er: user, password er:  (genereret af Spring)
+
+Prøv at se i jeres Console, Spring har genereret et password, et langt password. Kopier det over i browseren og tryk Sign in.
+
+Vi er blevet authenticated af Spring, vi er logget ind. Prøv kig i developer tools i browser, under application faneblad.
+
+Vi har fået en cookie med navnet JSESSIONID, som bliver ved os mens vi er logget ind. Som sædvanlig er der sket en masse bag vores ryg, vi vil nu prøve at få lidt kontrol med hvad der sker.
+Lige inden vi gør det, så prøv at åbne et nyt faneblad i browseren og tast http://localhost:8080/test
+Vi kan se denne gang behøver vi ikke at login. Netop fordi vi har vores cookie i browseren.
+
+I vores pom.xml fil kan vi se vi har fået en reference til Spring Security.
+
+
+
+Ovenstående funktionalitet kan vi jo ikke bruge til så meget. Med JWT derimod, kan vi sikre vores rest api og ikke vise nogen skærmbilleder i html i frontend. Vi kan også selv styre vores passwords på vores brugere.
+
+Her ses nogle af de komponenter som kommer med Spring Security. Authentication filter tager sig af login. Hvis det går godt, så oprettes der noget i Security Context, som altså default tager sig af, at vi får en cookie.
+
+
+
+
+
+
+
+
+
+
+
+Det er muligt at konfigurere username og password i application.properties. Men igen ikke særlig brugbart. Der er i øvrigt et hav af security ting man kan setup i application.properties.
+spring.security.user.name=erik
+spring.security.user.password=test
+
+Her er en fyldestgørende oversigt. 
+https://docs.spring.io/spring-boot/docs/current/reference/html/application-properties.html#appendix.application-properties.security
+
+
+
+
+
+
+
+Vores første security code.
+Vi opretter nu en ny package og kalder den config. 
+Så en ny klasse der hedder ProjectSecurityConfig.
+
+Vi skal overskrive det kode der præsenterer en login form.
+Vi kan finde den kode vi skal overskrive i klassen SpringBootWebSecurityConfiguration
+
+Her er den bean som danner login form bl.a. 
+
+
+
+Ovenstående kode har allerede ændret sig i Spring Boot version 3. I version 3.1 er det blevet ændret til et lambda. Så det her Spring Security framework ændrer sig hele tiden. Tallet efter @Order annotation betyder hvilken rækkefølge de forskellige filtre bliver kaldt.
+Jeg skriver følgende kode: 
+@Configuration
+public class ProjectSecurityConfig {
+
+    @Bean
+    SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests((requests) -> {
+            requests.requestMatchers("/myAccount","/myBalance").authenticated()
+                    .requestMatchers("/contact").permitAll();
+        });
+        http.formLogin(Customizer.withDefaults());
+        http.httpBasic(Customizer.withDefaults());
+        return http.build();
+    }
+}
+For at teste ovenstående tilføjer jeg nye endpoints. /myAccount , /myBalance, /contact.
+Opret 3 nye klasser. AccountController, BalanceController, ContactController.
+
+@RestController
+public class AccountController {
+    @GetMapping("/myAccount")
+    public String getAccountDetails() {
+        return "Here are the accountdetails from db";
+    }
+}
+
+@RestController
+public class BalanceController {
+    @GetMapping("/myBalance")
+    public String getBalanceDetails() {
+        return "Here are the balancedetails from db";
+    }
+}
+
+@RestController
+public class ContactController {
+    @GetMapping("/contact")
+    public String getContactDetails() {
+        return "Here are the contactdetails from db";
+    }
+}
+
+Jeg har nu følgende pakker og klasser:
+
+
+Jeg kan nu teste min første lille stump security kode.
+Hvis jeg skriver http://localhost:8080/contact
+
+Kan vi se, at der ikke kræves login. Fordi vi har kodet:
+                    .requestMatchers("/contact").permitAll();
+
+De her requests kræver login:
+            requests.requestMatchers("/myAccount","/myBalance").authenticated()
+
+Vores /test end point kræver også login, så det er åbenbart default.
+
+
+Hvis vi debugger ovenstående kan vi se hvad det er for en filterchain vi returnerer.
+
+
+OBS: Sæt breakpointet på linien før return - ellers breaker debuggeren ikke.
+Spring Security Filter er det første man rammer når man kalder et Rest endpoint. Vi returnerer en FilterChain, en kæde af filtre som alle skal passeres.
+
+
+Vi kan godt disable default Spring Security login form. Det gøres via en lambda.
+http.formLogin(flc -> flc.disable());
+
+
+Når vi disabler default login form, så vil browser stadig prøve at få userid og password. Nu med sin egen indbyggede form. Det kan se sådan her ud, hvis vi kører ovenstående.
+
+Det skal vi ikke bruge. Så ret koden tilbage. Vi vil i stedet starte med at håndtere user og password i vores MySql database. Vi skal ikke bruge nogen form for login skærm til noget, vi ender ud med at benytte JWT, og frontend skal selv implementerer en loginskærm.
+Håndtering af Users.
+Vi skulle gerne ende op med at have vores brugere og passwords i vores MySql database.
+Til at starte med vil vi kigge på interfacet UserDetailsService.
+
+Oventstående er provided af Spring.
+Ovenstående bruger UserDetails interface.
+
+
+Et dejligt simpelt interface, som ikke ændrer sig så meget. Det er en del af Spring Security Core.
+getAuthorities, er til håndtering af roller. En bruger kan have en liste af roller. 
+Spring UserDetailsService har bare 1 metode, loadUserByUsername. Det skal vi på en eller anden måde hook ind i, så loadUserByUsername henter en user fra vores JPA database.
+
+
+
+
+UserDetailsManager håndterer først og fremmest CRUD på brugere.
+Spring kommer med en JDBC implementation af UserDetailsService
+
+''
+
+
+Vi opretter en ny package og kalder den model.
+Opret ny klasse og kald den Customer. Jeg kalder den med vilje Customer og ikke User, for ikke at forveksle med andre SpringSecurity User klasser.
+@Entity
+public class Customer {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    private String email;
+    private String pwd;
+    private String role;
+
+Tilføj getter og setters.
+Opret Customer repository.
+public interface CustomerRepository extends JpaRepository<Customer, Integer> {
+    Optional<Customer> findByEmail(String email);
+
+Vi skal have Customers i vores MySql database. Her er min application.properties.
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/springsec04
+spring.datasource.username=jens
+spring.datasource.password=x
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+
+
+
+Nu skal vi implementere interfacet UserDetailsService.
+Opret en ny package, kald den service.
+Opret en ny klasse, kald den BankLoadUserService.
+Kopier følgende kode ind.
+@Service
+public class BankLoadUserService implements UserDetailsService {
+
+@Autowired
+CustomerRepository customerRepository;
+
+
+@Override
+public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    String userName, password = null;
+    List<GrantedAuthority> authorities = null;
+    Optional<Customer> customer = customerRepository.findByEmail(username);
+    if (customer.isPresent()) {
+        userName = customer.get().getEmail();
+        password = customer.get().getPwd();
+        authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority(customer.get().getRole()));
+    } else {
+        throw new UsernameNotFoundException("User details not found for the user:" + username);
+    }
+    return new User(username,password,authorities);
+}
+
+Vi skal importere en masse klasser. Det gør vi med sædvanlige Alt+Enter.
+Vi starter med:
+import org.example.springsecurity01.model.Customer;
+import org.example.springsecurity01.repository.CustomerRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+Nu mangler vi bare klassen User. Hvis vi trykker Alt+Enter får vi apache.catalina.
+Det er FORKERT.
+
+
+Klik på Import class...
+
+Vi kan se nedenunder catalina, står der springframework.security.core , nok mere rigtigt.
+Nu kan vi compile vores program.
+Prøv at køre og login. Med det mener jeg prøv skriv
+http://localhost:8080/myAccount
+Bliver dirigeret til login skærm. Når login kommer vi ned i vores loadUserByUsername metode.
+Vi får den her fejl når vi prøver at login.
+
+
+Vi kan prøve at indsætte en user i databasen.
+
+
+Hvis vi ikke har tastet role ind i vores database, får vi den her fejl i browser.
+
+Hvis vi debugger og stepper igennem loadUserByUsername metoden kan vi se det er den her linje der kaster en exception.
+authorities.add(new SimpleGrantedAuthority(customer.get().getRole()));
+Efter tilføjet en rolle (hvad som helst) i vores database, kommer vi videre i vores loadUserByUsername().
+Vi tilføjer en role i vores database og prøver igen.
+
+
+
+Vi kommer videre, men nu får vi en ny fejl.
+
+Vi skal implementere en password encoder. I vores database skal vi gemme krypteret passwords, og vi skal konfigurere hvordan vores passwords skal krypteres.
+Tilføj den her bean til vores Config klasse.
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return NoOpPasswordEncoder.getInstance();
+}
+
+Eller:
+@Bean
+public PasswordEncoder passwordEncoder() {
+    var obj = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    return NoOpPasswordEncoder.getInstance();
+}
+Hvis man control klikker på ovenstående createDelegatingPassword så får man en liste over diverse encoders.
+
+
+
+Det her bliver vores endelige bud
+@Bean
+public PasswordEncoder passwordEncoder() {
+    var obj = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    //return NoOpPasswordEncoder.getInstance();
+    return obj;
+}
+Efter at have tilføjet en PasswordEncoder, så får vi den her fejl:
+
+Vi får at vide at vores passwords skal have et encoding prefix.
+For at få krypteret passwords i vores database, vil vi nu skrive et Rest endpoint som kan bruges til at oprette brugere i vores database. Vi kalder vores end point for /register. Vi skriver en ny klasse UserController som vi vil bruge til alt med at registrere nye users og senere også login. Husk vi kalder vores users for Customer.
+
+Her følger koden som vi kan kopiere ind i vores nye klasse.
+
+@RestController
+public class UserController {
+
+
+    @Autowired
+    CustomerRepository customerRepository;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
+
+    @PostMapping("/register")
+    public ResponseEntity<String> registerUser(@RequestBody Customer customer) {
+        Customer savedCustomer = null;
+        ResponseEntity response = null;
+        try {
+            String hashPwd = passwordEncoder.encode(customer.getPwd());
+            customer.setPwd(hashPwd);
+            savedCustomer = customerRepository.save(customer);
+            if (savedCustomer.getId() > 0) {
+                response = ResponseEntity.status(HttpStatus.CREATED)
+                        .body("Given user details are successfully registrered");
+            }
+        } catch (Exception ex) {
+            response = ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("An exception occured due to" + ex.getMessage());
+        }
+        return response;
+    }
+
+}
+
+Prøv at kalde ovenstående fra Postman.
+
+Det går selvfølgeligt helt galt. Der er et par ting vi skal have ordnet.
+Efter kodet register end point. Skal vi enable register i vores config metode.
+Fordi det er en Post, skal vi også rode med csrf. Til at starte med kan vi blot disable csrf helt.
+Enable /register
+Disable csrf
+Kopier det her kode ind i ProjectSecurityConfig klassen.
+@Bean
+public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+    http.csrf(csrfConfig -> csrfConfig.disable())
+        .authorizeHttpRequests((requests) -> { requests
+            .requestMatchers("/myAccount","/myBalance").authenticated()
+            .requestMatchers("/contact", "/register").permitAll();
+    });
+    http.formLogin(Customizer.withDefaults());
+    http.httpBasic(Customizer.withDefaults());
+    var obj = http.build();
+    return obj;
+}
+
+
+
+Nu burde vi kunne kalde vores nye register end point fra Postman, og indsætte brugere i vores database.
+
+
+I vores database ser det sådan her ud:
+
+Vi kan se at vores password er krypteret med bcrypt algoritmen. Det er default i Spring.
+
+Bedre password encoder.
+
+SpringSecurity kommer med support for flere password encoders. En meget udbredt encoder er BCrypt, som blev opfundet i 1999. BCrypt kan kaldes med parameter som angiver styrke på encoding algorithm. Vi starter med default altså tom parentes. Default er 10. Man skal kun ændre strength dette ene sted. Prøv f.eks. at ændre det til 20. I vil se det tager meget lang tid både at encode med strenth 20 og decode altså login, med strength 20.
+
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+}
+
+Nu skal vi tilføje pasword encoding til vores register metode.
+@PostMapping("/register")
+public ResponseEntity<String> registerUser(@RequestBody Customer customer) {
+    Customer savedCustomer = null;
+    ResponseEntity response = null;
+    try {
+        String hashPwd = passwordEncoder.encode(customer.getPwd());
+        customer.setPwd(hashPwd);
+        savedCustomer = customerRepository.save(customer);
+
+
+For at få PostMapping til at virke skal vi huske ovenstående med at disable csrf.
+Der er ikke nogen authorization på register. Så det fjerner vi fra Postman.
+
+
+Nu kalder vi så register fra Postman
+
+Med BCrypt sat til 20, tager det noget tid at gemme password i databasen.
+
+I database kan vi se vi har gemt password med 3 forskellige krypteringsalgoritmer. Eller rettere med BCrypt sat til default, så til 10, så til 20.
+
+
+
+I MySql Workbench kan man se starten af det hashede password indeholder type og strength af BCrypt algoritmen. Den information skal bruges når vi decrypter vores password.
+Hvis man vil se hvad der sker når password bliver testet, så kan man sætte et breakpoint i matches metoden i BCryptPasswordEncoder klassen.
+
+Prøv at login med erik,hej som jeg har gemt i min InitData uden password encrypter.
+Vi får stadig standard SpringSecurity login skærm. Vi kan nu login med vores userid og password, og det virker selvom password er encryptet i database.
+Alt + F1 , derefter Enter. Så kan man se hvor BCryptPasswordEncoder klassen ligger.
+
+
+CORS
+
+
+
+
+Med Spring Security kan man konfigurere CORS i SecurityFilter metoden. Det er klart bedre end at skulle konfigurere det i hver enkel rest controller.
+
+CSRF
+
+I stedet for at disable csrf helt, kan vi bruge RequestMatchers til at konfigurere csrf også.
+http.csrf((csrf) -> csrf.ignoringRequestMatchers("/contact","/register"))
+
+
+
+
+
+
+
+Formålet med denne manual er, at komme i gang med at konfigurere de enkelte end points med security. At registrere en bruger med user id og password. At kryptere password før det gemmes i databasen. I næste afsnit skal vi kode vores egen Authentication Provider.
+
+
+
+
+
+
+Forfattere: erlm10-12-2020   1
+
+
+
+
+

@@ -1,0 +1,318 @@
+﻿Tutorial Spring Security med JWT
+Programmering 2, 3. semester KEA, efterår 2024.
+
+I denne manual vil vi først skrive vores egen AuthenticationProvider, som erstatter vores simple UserDetailsService.
+
+
+
+
+Nu vil vi prøve at implementere vores egen AuthenticationProvider.
+Vi opretter en ny klasse i vores config package.
+
+
+
+
+Første metode vi skal implementere, er supports.
+
+Her kopierer vi fra AbstractUserDetailsAuthenticationProvider
+
+
+Første version af vores egen AuthenticationProvider.
+package org.example.springsecurity03.config;
+
+import org.example.springsecurity03.service.BankLoadUserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+
+@Component
+public class EazyBankUsernamePwdAuthenticationProvider implements AuthenticationProvider {
+
+    @Autowired
+    BankLoadUserService bankLoadUserService;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
+    @Override
+    public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+        String username = authentication.getName();
+        String pwd = authentication.getCredentials().toString();
+        UserDetails userDetails = bankLoadUserService.loadUserByUsername(username);
+        if (passwordEncoder.matches(pwd, userDetails.getPassword())) {
+            //Fetch age details and perform validation of. Andre forretningsregler end userid og password
+            return new UsernamePasswordAuthenticationToken(username, pwd, userDetails.getAuthorities());
+        } else {
+         throw new BadCredentialsException("Invalid password");
+        }
+    }
+
+    @Override
+    public boolean supports(Class<?> authentication) {
+        return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
+    }
+}
+
+
+Nu kan vi debug vores nye kode
+
+Vi kan se det virker.
+Hvis vi har breakpoint i support metoden og stepper ud, kan vi se listen af tilgængelige providers. Lige nu har vi kun kodet 1.
+
+
+
+Man kan nu relativt nemt skrive flere providers. 
+Feks kan man skrive en Provider til produktion og en til test og pre prod.
+
+Man kan benytte det samme trick med 2 forskellige SecurityConfig klasser.
+
+
+Her bliver config sat til kun at accepterer HTTPS data.
+Med linjen rcc.anyRequest().requiresSecure()
+
+Det kræver vores application kører med et certifikat.
+Vi kan skrive det modsatte i vores config.
+
+
+Nok om http og https.
+Vi kan prøve at kalde vores Get myBalance fra Postman.
+Klik på faneblad Authoriation og vælg Basic Auth fra drop down.
+Udfyld Username og Password. Man burde få balancedetails retur.
+
+Hvis vi prøver med forkert password får vi fejl 401.
+
+Bemærk der er ikke slået global Spring Exception handling til. Der bliver ikke returneret en fin ErrorMessage, men Http statuskoden er god nok.
+
+
+
+Vi kan sætte et breakpoint i AccessDeniedHandlerImpl
+
+Og prøve at login med forkert end point. Så kommer vi faktisk ind i handle metoden.
+
+Vi får en 403 forbidden fejl. Efter vi har kørt succesfuldt igennem Authorization.
+
+Kopierer fra BasicAuthenticationEntryPoint
+
+Vi kan nu skrive vores egen header som bliver aktiveret hvis vi taster forkert password.
+
+I vores config skal vi konfigurere at vi har skrevet vores egen commence metode.
+
+
+
+I ovenstående screendump fra Postman kan vi se vores nye header.
+Hvis man vil kan man også returnere noget mere text i response delen.
+
+
+Det vil nok være bedre at bruge en ErrorMessage klasse her.
+
+
+
+
+Får vores egen response.
+
+En bedre global handling.
+
+
+Nu skal det handle om Access Denied. Fejl 403.
+
+Der er implementeret mange subklasser.
+
+Vi skriver nu vores egen AccessDeniedHandler.
+
+Samme som før med skift til accessDenied og FORBIDDEN.
+
+
+Nu får jeg min nye fejl i bl.a. min header i Postman.
+
+I stedet for json i browser, kan man vælge at redirecte til en bestemt html side.
+
+Man kan sætte timeout på jsesionid cookie, i application.properties.
+
+Man kan konfigurere redirect til side hvis session timeout. Man kan konfigurere hvor mange samtidige connections en bruger kan have.
+
+
+
+
+
+
+
+Authentication event. F.eks. send email når nogen logger ind.
+
+
+
+
+
+
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Opret ny klasse under service pakken.
+public class BankAuthenticationProvider implements AuthenticationProvider {
+
+    @Override
+    public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+        return null;
+    }
+
+    @Override
+    public boolean supports(Class<?> authentication) {
+        return false;
+    }
+}
+
+
+   @Override
+    public boolean supports(Class<?> authentication) {
+        return (UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication));
+
+@Override
+public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+    String username = authentication.getName();
+    String pwd = authentication.getCredentials().toString();
+    System.out.println("loadUser kaldt: user=" + username);
+    Optional<Customer> customer = null;
+    try {
+        customer = customerRepository.findByEmail(username);
+    } catch (Exception ex) {
+        System.out.println("Database fejl =" + ex.getMessage());
+    }
+    if (customer.isPresent()) {
+        if (passwordEncoder.matches(pwd, customer.get().getPwd())) {
+            List<GrantedAuthority> authorities = new ArrayList<>();
+            authorities.add(new SimpleGrantedAuthority(customer.get().getRole()));
+            return new UsernamePasswordAuthenticationToken(username, pwd, authorities);
+        } else {
+            throw new BadCredentialsException("Invalid password");
+        }
+    } else {
+        throw new BadCredentialsException("No user registered with this details!");
+    }
+}
+
+
+Vi kan nu bruge ovenstående klasse i stedet for vores UserDetails klasse.
+Det giver os lidt mere kontrol. 
+Vi kan i princippet slette vores BankLoadUserService klasse nu.
+
+
+
+
+
+If authentication fail we get 401. If authorization fail we get 403.
+Hvor er Authority stored i Spring Security.
+
+
+
+Man bruger 2 ord for roller i Spring Security. Authority og Role.
+Her er den simple indbyggede GrandAuthority klasse.
+
+
+
+
+
+
+
+
+
+
+Det her virker:
+
+Med de her data i databasen:
+
+Så bemærk. Der står ROLE_ foran den rolle som man bruger i requestMatchers.
+
+Næste afsnit handler om at implementere sine egne filtre i Spring.
+
+
+
+
+
+
+
+Der er mange indbyggede filtre i Spring Security.
+Filters er en specialisering af Servlets.
+
+
+
+
+
+
+Der bliver udført mere end 10 indbyggede filtre i Spring Security. Et filter af gangen.
+
+
+@SpringBootApplication
+@EnableWebSecurity(debug = true)
+public class SpringSec6zero03Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpringSec6zero03Application.class, args);
+    }
+
+}
+
+Hvis vi enabler WebSecurity med debug = true, og vi skriver denne linje i application.properties:
+logging.level.org.springframework.security.web.FilterChainProxy=DEBUG
+
+
+
+
+
+
+I Klassen VirtualFilterChain er der en metode doFilter. Som løber igennem alle filtre i Spring Security. Denne doFilter metode ser ud til at have ændret sig på bare nogle få versioner af Spring Boot.
+
+Spring ændrer sig hele tiden.
+
+
+
+Vi starter vores Spring projekt op i debug mode. Skriver http://localhost:8080/myAccount i browser.
+Vi har sat et breakpoint i vores doFilter()
+
+Control Click på Filter i ovenstående, for at se Filter interface.
+
+
+Nu opretter vi en ny package, filter.
+Skriv ny klasse RequestValidationBeforeFilter, som implements Filter.
+Tryk Alt+Insert for generate menu, vælg implement methods, og vælg doFilter.
+
+import jakarta.servlet.*;
+
+import java.io.IOException;
+
+public class RequestValidationBeforeFilter implements Filter {
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
+        
+    }
+}
+
+
+
+
+Nu kan vi tilføje vores filter til filterkæden.
+
+Nu kan vi sæt breakpoint i ovenstående og se vi har tilføjet et filter.
+I næste manual, vil vi implementere håndtering af JWT tokens i Spring filters.
+
+
+
+
+
+
+
+
+
+
+
+
+Forfattere: erlm10-12-2020   1
+
+
+
+
+

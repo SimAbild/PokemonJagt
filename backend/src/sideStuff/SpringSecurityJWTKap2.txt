@@ -1,0 +1,334 @@
+﻿Tutorial Spring Security med JWT. Kap2.
+Programmering 2, 3. semester KEA, efterår 2024.
+
+Dette dokument er andet kapitel af Spring Security med JWT.
+I første kapitel, skrev vi første version af security konfigurering med SecurityFilterChain.
+Oprettede en Customer entity, som betød vi kan oprette brugere i MySql database.
+
+Vi prøver fra Postman om det er rigtigt.
+
+
+Tine kunne godt se balance.
+
+Kurt kunne se account.
+
+Tine kan ikke se account, læg mærke til vi får statuskode 403.
+
+Nu skal det handle om JWT tokens. T står for token. JWT for JSon Web Token.
+
+Meningen er, vi kalder et login endpoint fra vores frontend, og får et jwt token tilbage. Dette token gemmer vi i vores browser, i f.eks. local storage eller session storage. Spørg ChatGPT, svar er local storage eller session storage.
+Vi skal nu kode en komponent der danner et JWT token, og et login endpoint der giver os et JWT token.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Ovenpå alt det snak om JWT tokens, for at komme i gang skal vi tilføje følgende dependencies til vores pom fil:
+
+
+
+<dependency>
+   <groupId>io.jsonwebtoken</groupId>
+   <artifactId>jjwt-api</artifactId>
+   <version>0.11.5</version>
+</dependency>
+<dependency>
+   <groupId>io.jsonwebtoken</groupId>
+   <artifactId>jjwt-impl</artifactId>
+   <version>0.11.5</version>
+   <scope>runtime</scope>
+</dependency>
+<dependency>
+   <groupId>io.jsonwebtoken</groupId>
+   <artifactId>jjwt-jackson</artifactId> 
+   <version>0.11.5</version>
+   <scope>runtime</scope>
+</dependency>
+
+I vores configuration klasse, der skal vi nu setup at vi ikke skal have JSESSIONID cookie, men at vi bruger JWT. Det gøres åbenbart via SessionCreationPolicy.
+
+Her er koden der skal i vores ProjectSecurityConfigAdvanced klasse:
+@Configuration
+public class ProjectSecurityConfigAdvanced {
+
+        @Bean
+        SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+            CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+            requestHandler.setCsrfRequestAttributeName("_csrf");
+            http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    .cors(corsCustomizer -> corsCustomizer.configurationSource(new CorsConfigurationSource() {
+                        @Override
+                        public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+                            CorsConfiguration config = new CorsConfiguration();
+                            config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+                            config.setAllowedMethods(Collections.singletonList("*"));
+                            config.setAllowCredentials(true);
+                            config.setAllowedHeaders(Collections.singletonList("*"));
+                            config.setExposedHeaders(Arrays.asList("Authorization"));
+                            config.setMaxAge(3600L);
+                            return config;
+                        }
+                    })).csrf((csrf) -> csrf.csrfTokenRequestHandler(requestHandler).ignoringRequestMatchers("/contact","/register")
+                            .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                    .authorizeHttpRequests((requests)->requests
+                            .requestMatchers("/myAccount").hasRole("USER")
+                            .requestMatchers("/myBalance").hasAnyRole("USER","ADMIN")
+                            .requestMatchers("/myLoans").hasRole("USER")
+                            .requestMatchers("/myCards").hasRole("USER")
+                            .requestMatchers("/user").authenticated()
+                            .requestMatchers("/notices","/contact","/register").permitAll())
+                    .formLogin(Customizer.withDefaults())
+                    .httpBasic(Customizer.withDefaults());
+            return http.build();
+        }
+
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+            return new BCryptPasswordEncoder();
+        }
+
+}
+
+Bruges til JWT token, exposed headers.
+
+
+Så skal vi definere nogle konstanter. Opret en ny package og kald den constants.
+Opret et nyt interface og kald det SecurityConstants. 
+
+JWT_KEY bør lægges i en environment variable.
+
+Opret en ny package og kald den for filter.
+Opret en ny klasse og kald den for JWTTokenGeneratorFilter.
+Skriv:
+public class JWTTokenGeneratorFilter extends OncePerRequestFilter {
+Her er hele koden:
+
+
+Vi danner kun JWT token i login kald:
+
+public class JWTTokenGeneratorFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        System.out.printf("JWT kaldt");
+        if (null != authentication) {
+            SecretKey key = Keys.hmacShaKeyFor(SecurityConstants.JWT_KEY.getBytes(StandardCharsets.UTF_8));
+            String jwt = Jwts.builder().setIssuer("Eazy Bank").setSubject("JWT Token")
+                    .claim("username", authentication.getName())
+                    .claim("authorities", populateAuthorities(authentication.getAuthorities()))
+                    .setIssuedAt(new Date())
+                    .setExpiration(new Date((new Date()).getTime() + 30000000))
+                    .signWith(key).compact();
+            response.setHeader(SecurityConstants.JWT_HEADER, jwt);
+            System.out.println(jwt);
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return !request.getServletPath().equals("/user");
+    }
+
+    private String populateAuthorities(Collection<? extends GrantedAuthority> collection) {
+        Set<String> authoritiesSet = new HashSet<>();
+        for (GrantedAuthority authority : collection) {
+            authoritiesSet.add(authority.getAuthority());
+        }
+        return String.join(",", authoritiesSet);
+    }
+}
+
+Vi skal nu tilføje hvornår filter skal kaldes i vores lange config metode, med kaldet addFilterAfter().
+
+
+
+Nu kan vi prøve at teste fra Postman. Jeg retter lige shouldNotFilter til not myBalance. Så filter altså bliver kørt når jeg kalder /myBalance.
+
+
+
+Vi kan se vi har fået vores JWT token i Authorization header.
+Jeg kan tage en kopi af mit token.
+
+Og prøve det af på jwt.io siden.
+
+Tryk Debugger i ovenstående menu.
+
+Siden kan åbenbart uden videre decrypt vores token. Vi kan se vores Payload med username og rolle.
+Det er lidt mystisk. Man kan forhåbentligt ikke gå den anden vej. Altså rette f.eks. rolle og danne et nyt token og bruge. Det kræver nok kendskab til JWT_KEY for at kunne gøre det.
+Nu mangler vi kun et filter for at validere et JWT token. 
+I filter package opret en ny klasse JWTTokenValidatorFilter. 
+public class JWTTokenValidatorFilter extends OncePerRequestFilter {
+
+Her er koden:
+
+
+public class JWTTokenValidatorFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        String jwt = request.getHeader(SecurityConstants.JWT_HEADER);
+        System.out.printf("JWT Validation kaldt header=" + jwt);
+        if (null != jwt) {
+            try {
+                SecretKey key = Keys.hmacShaKeyFor(
+                        SecurityConstants.JWT_KEY.getBytes(StandardCharsets.UTF_8));
+
+                Claims claims = Jwts.parserBuilder()
+                        .setSigningKey(key)
+                        .build()
+                        .parseClaimsJws(jwt)
+                        .getBody();
+                String username = String.valueOf(claims.get("username"));
+                String authorities = (String) claims.get("authorities");
+                Authentication auth = new UsernamePasswordAuthenticationToken(username, null,
+                        AuthorityUtils.commaSeparatedStringToAuthorityList(authorities));
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } catch (Exception e) {
+                throw new BadCredentialsException("Invalid Token received!");
+            }
+
+        }
+        filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getServletPath().equals("/myBalance");
+    }
+
+}
+
+Vi skal tilføje den nye klassse til vores configuration.
+
+Vi udfører JWT validation before BasicAuthenticationFilter.
+
+Nu skriver vi lige en simpel login.
+I vores configurations klasse skal vi tilføje en AuthenticationManager bean.
+
+
+I vores login Rest controller kan vi så Autowire vores AuthenticationManager ind.
+Jeg har valgt at kalde mit login end point for dologin.
+@PostMapping("/dologin")
+public ResponseEntity<String> doLogin(@RequestBody Customer customer) {
+    Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(customer.getEmail(), customer.getPwd()));
+    if(authentication.isAuthenticated()){
+        //return JwtResponseDTO.builder()
+        //        .accessToken(jwtService.GenerateToken(authRequestDTO.getUsername()).build();
+        return ResponseEntity.status(HttpStatus.OK)
+                .body("Du er logget på");
+    } else {
+        throw new UsernameNotFoundException("invalid user request..!!");
+    }
+}
+
+Vigtigt at vi tilføjer dologin 2 steder i vores config. Nemlig til csrf og til permitAll().
+I
+
+
+I vores token generator, kun generer token når dologin.
+
+
+
+I vores validator , så validate altid, på nær dologin
+
+
+Fra Postman kan vi nu prøve at login og få vores JWT.
+Problemet med vores login og generate token, er den måde vi har kodet generate token, den første linje
+getAuthentication(), henter username fra Basic Auth.
+
+Så vi er nødt til at udfylde Basic Auth i Postman. 
+
+
+
+En måde at løse det på, er at kode vores Token generator som en service og ikke et filter. Så kalde den service direkte fra vores login metode, med username og password som parametre.
+Som det er nu kalder vi ovenstående dologin.
+Vi kan se vi får en fin JWT i Authorization felt i headers.
+
+Det kan vi nu kopiere over i en ny request, en Get myBalance.
+
+Role Admin, må tilgå myBalance. (meget mærkelig firma, USER må mere end ADMIN).
+
+
+Til sidste lidt dokumentation omkring brug af filtre i Spring Security.
+
+
+
+
+
+
+Der er mange indbyggede filtre i Spring Security.
+Filters er en specialisering af Servlets.
+
+
+
+
+
+
+Der bliver udført mere end 10 indbyggede filtre i Spring Security. Et filter af gangen.
+
+Man kan slå debug til så der kommer mere info ud i console.
+Tilføj EnableWebSecurity med debug = true
+@SpringBootApplication
+@EnableWebSecurity(debug = true)
+public class SpringSec6zero03Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpringSec6zero03Application.class, args);
+    }
+
+}
+
+Og skriv den her linje i application.properties:
+logging.level.org.springframework.security.web.FilterChainProxy=DEBUG
+
+
+
+
+
+I Klassen VirtualFilterChain er der en metode doFilter. Som løber igennem alle filtre i Spring Security. Denne doFilter metode ser ud til at have ændret sig på bare nogle få versioner af Spring Boot.
+
+Spring ændrer sig hele tiden.
+
+
+
+Vi starter vores Spring projekt op i debug mode. Skriver http://localhost:8080/myAccount i browser.
+Vi har sat et breakpoint i vores doFilter()
+
+Control Click på Filter i ovenstående, for at se Filter interface.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Forfattere: erlm10-12-2020   1
+
+
+
+
+
