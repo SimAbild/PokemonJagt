@@ -28,6 +28,9 @@ public class AuthService {
     @Value("${supabase.anon-key}")
     private String supabaseAnonKey;
 
+    @Value("${supabase.service-role-key}")
+    private String supabaseServiceRoleKey;
+
     // Spring's HTTP client for calling the Supabase REST API
     private final RestTemplate httpClient = new RestTemplate();
 
@@ -77,6 +80,28 @@ public class AuthService {
         );
 
         return supabaseResponse.getBody();
+    }
+
+    /**
+     * Opretter en bruger i Supabase via admin API — kræver service-role nøgle.
+     * Bruges kun af gym leader til at oprette nye brugere.
+     * Returnerer det UUID som Supabase tildeler den nye bruger.
+     */
+    public String createUserAsAdmin(String email, String password) {
+        String adminEndpoint = supabaseProjectUrl + "/auth/v1/admin/users";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("apikey", supabaseServiceRoleKey);
+        headers.setBearerAuth(supabaseServiceRoleKey);
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(
+                Map.of("email", email, "password", password, "email_confirm", true),
+                headers
+        );
+
+        ResponseEntity<Map> response = httpClient.exchange(adminEndpoint, HttpMethod.POST, request, Map.class);
+        return (String) response.getBody().get("id");
     }
 
     /**

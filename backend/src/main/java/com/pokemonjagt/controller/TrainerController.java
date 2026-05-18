@@ -1,11 +1,12 @@
 package com.pokemonjagt.controller;
 
-import com.pokemonjagt.dto.CreateTrainerRequest;
 import com.pokemonjagt.dto.TeamPokemonResponse;
-import com.pokemonjagt.dto.TrainerResponse;
+import com.pokemonjagt.dto.TrainerTeamResponse;
 import com.pokemonjagt.service.TrainerService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -19,51 +20,41 @@ public class TrainerController {
 
     private final TrainerService trainerService;
 
-    // @AuthenticationPrincipal Jwt jwt:
-    // Spring Security har allerede verificeret JWT'en inden denne metode kaldes
-    // Her beder vi Spring om at give os det verificerede JWT-objekt direkte som parameter
-    // jwt.getSubject() returnerer "sub"-feltet fra JWT — det er brugerens UUID fra Supabase
-    @GetMapping
-    public ResponseEntity<TrainerResponse> getOwnTrainerProfile(@AuthenticationPrincipal Jwt jwt) {
-        String userId = jwt.getSubject();
-        return trainerService.findTrainerByUserId(userId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<String> handleAccessDenied(AccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
     }
 
-    @PostMapping
-    public ResponseEntity<TrainerResponse> createOwnTrainerProfile(
-            @AuthenticationPrincipal Jwt jwt,
-            @RequestBody CreateTrainerRequest body) {
-
-        String userId = jwt.getSubject();
-        TrainerResponse created = trainerService.createTrainerProfile(userId, body.getName(), body.getGender());
-        return ResponseEntity.ok(created);
+    @ExceptionHandler({IllegalStateException.class, IllegalArgumentException.class})
+    public ResponseEntity<String> handleBadRequest(RuntimeException e) {
+        return ResponseEntity.badRequest().body(e.getMessage());
     }
 
+    // Trainer ser og administrerer sit eget hold
     @GetMapping("/team")
-    public List<TeamPokemonResponse> getOwnPokemonTeam(@AuthenticationPrincipal Jwt jwt) {
-        String userId = jwt.getSubject();
-        return trainerService.getTrainerTeam(userId);
+    public List<TeamPokemonResponse> getOwnTeam(@AuthenticationPrincipal Jwt jwt) {
+        return trainerService.getOwnTeam(jwt.getSubject());
     }
 
     @PostMapping("/team/{pokedexId}")
-    public ResponseEntity<Void> catchPokemonFromPokedex(
+    public ResponseEntity<Void> catchPokemon(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable int pokedexId) {
-
-        String userId = jwt.getSubject();
-        trainerService.addPokemonToTeam(userId, pokedexId);
+        trainerService.addPokemon(jwt.getSubject(), pokedexId);
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/team/{caughtPokemonId}")
-    public ResponseEntity<Void> releasePokemonFromTeam(
+    public ResponseEntity<Void> releasePokemon(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable String caughtPokemonId) {
-
-        String userId = jwt.getSubject();
-        trainerService.removePokemonFromTeam(userId, caughtPokemonId);
+        trainerService.removePokemon(jwt.getSubject(), caughtPokemonId);
         return ResponseEntity.ok().build();
+    }
+
+    // Trainer (og gym leader) ser alle trainers' hold
+    @GetMapping("/all-teams")
+    public List<TrainerTeamResponse> getAllTrainerTeams(@AuthenticationPrincipal Jwt jwt) {
+        return trainerService.getAllTrainerTeams(jwt.getSubject());
     }
 }

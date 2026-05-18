@@ -7,7 +7,9 @@
       "mcp__claude_ai_Supabase__apply_migration",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\simon\\\\IdeaProjects\\\\PokemonJagt\\\\backend\" -Recurse -ErrorAction SilentlyContinue)",
       "Bash(Select-Object FullName)",
-      "WebFetch(domain:supabase.com)"
+      "WebFetch(domain:supabase.com)",
+      "Bash(Remove-Item *)",
+      "mcp__claude_ai_Supabase__execute_sql"
     ]
   }
 }

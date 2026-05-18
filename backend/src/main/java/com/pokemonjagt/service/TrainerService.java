@@ -1,84 +1,118 @@
 package com.pokemonjagt.service;
 
+import com.pokemonjagt.dto.GymMemberResponse;
 import com.pokemonjagt.dto.TeamPokemonResponse;
-import com.pokemonjagt.dto.TrainerResponse;
-import com.pokemonjagt.entity.Trainer;
+import com.pokemonjagt.dto.TrainerTeamResponse;
+import com.pokemonjagt.entity.GymMember;
+import com.pokemonjagt.entity.MemberRole;
 import com.pokemonjagt.entity.TrainerPokemon;
+import com.pokemonjagt.repository.GymMemberRepository;
+import com.pokemonjagt.repository.GymRosterRepository;
 import com.pokemonjagt.repository.PokedexRepository;
 import com.pokemonjagt.repository.TrainerPokemonRepository;
-import com.pokemonjagt.repository.TrainerRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @RequiredArgsConstructor
 @Service
 public class TrainerService {
 
-    private final TrainerRepository trainerRepository;
+    private final GymMemberRepository      gymMemberRepository;
+    private final GymRosterRepository      gymRosterRepository;
     private final TrainerPokemonRepository trainerPokemonRepository;
-    private final PokedexRepository pokedexRepository;
+    private final PokedexRepository        pokedexRepository;
 
-    public Optional<TrainerResponse> findTrainerByUserId(String userId) {
-        return trainerRepository.findByUserId(UUID.fromString(userId))
-                .map(this::toTrainerResponse);
-    }
+    // -------------------------------------------------------------------------
+    // Eget hold
+    // -------------------------------------------------------------------------
 
     @Transactional
-    public TrainerResponse createTrainerProfile(String userId, String trainerName, String gender) {
-        Trainer trainer = new Trainer();
-        trainer.setUserId(UUID.fromString(userId));
-        trainer.setName(trainerName);
-        trainer.setGender(gender);
-        trainerRepository.save(trainer);
-        return toTrainerResponse(trainer);
-    }
-
-    public List<TeamPokemonResponse> getTrainerTeam(String userId) {
-        return trainerPokemonRepository
-                .findByTrainerUserIdOrderByCaughtAtDesc(UUID.fromString(userId))
+    public List<TeamPokemonResponse> getOwnTeam(String userId) {
+        requireRole(userId, MemberRole.TRAINER, MemberRole.GYM_LEADER);
+        return trainerPokemonRepository.findByMemberUserIdOrderByCaughtAtDesc(UUID.fromString(userId))
                 .stream()
                 .map(this::toTeamPokemonResponse)
                 .toList();
     }
 
     @Transactional
-    public void addPokemonToTeam(String userId, int pokedexId) {
-        Trainer trainer = trainerRepository.findByUserId(UUID.fromString(userId))
-                .orElseThrow(() -> new IllegalStateException("Trainer not found for user " + userId));
+    public void addPokemon(String userId, int pokedexId) {
+        requireRole(userId, MemberRole.TRAINER, MemberRole.GYM_LEADER);
+
+        GymMember member = gymMemberRepository.findByUserId(UUID.fromString(userId))
+                .orElseThrow(() -> new IllegalStateException("Profil ikke fundet"));
 
         var pokedexEntry = pokedexRepository.findById(pokedexId)
-                .orElseThrow(() -> new IllegalArgumentException("No pokemon with pokedex id " + pokedexId));
+                .orElseThrow(() -> new IllegalArgumentException("Pokemon ikke fundet: " + pokedexId));
 
         TrainerPokemon caught = new TrainerPokemon();
-        caught.setTrainer(trainer);
+        caught.setMember(member);
         caught.setPokedex(pokedexEntry);
         caught.setLevel(5);
         trainerPokemonRepository.save(caught);
     }
 
     @Transactional
-    public void removePokemonFromTeam(String userId, String caughtPokemonId) {
-        TrainerPokemon entry = trainerPokemonRepository.findById(UUID.fromString(caughtPokemonId))
-                .orElseThrow(() -> new IllegalArgumentException("Caught pokemon not found"));
+    public void removePokemon(String userId, String caughtPokemonId) {
+        requireRole(userId, MemberRole.TRAINER, MemberRole.GYM_LEADER);
 
-        if (!entry.getTrainer().getUserId().equals(UUID.fromString(userId))) {
-            throw new IllegalStateException("Pokemon does not belong to this trainer");
+        TrainerPokemon entry = trainerPokemonRepository.findById(UUID.fromString(caughtPokemonId))
+                .orElseThrow(() -> new IllegalArgumentException("Pokemon ikke fundet"));
+
+        if (!entry.getMember().getUserId().equals(UUID.fromString(userId))) {
+            throw new AccessDeniedException("Denne pokemon tilhører ikke dig");
         }
 
         trainerPokemonRepository.delete(entry);
     }
 
-    private TrainerResponse toTrainerResponse(Trainer t) {
-        return new TrainerResponse(
-                t.getId().toString(),
-                t.getName(),
-                t.getGender(),
-                t.getCreatedAt() != null ? t.getCreatedAt().toString() : null
+    // -------------------------------------------------------------------------
+    // Alle trainers' hold — tilgængeligt for TRAINER og GYM_LEADER
+    // -------------------------------------------------------------------------
+
+    @Transactional
+    public List<TrainerTeamResponse> getAllTrainerTeams(String callerUserId) {
+        requireRole(callerUserId, MemberRole.TRAINER, MemberRole.GYM_LEADER);
+
+        return gymMemberRepository.findByRole(MemberRole.TRAINER).stream()
+                .map(trainer -> new TrainerTeamResponse(
+                        toMemberResponse(trainer),
+                        trainerPokemonRepository.findByMemberIdOrderByCaughtAtDesc(trainer.getId())
+                                .stream()
+                                .map(this::toTeamPokemonResponse)
+                                .toList()
+                ))
+                .toList();
+    }
+
+    // -------------------------------------------------------------------------
+    // Hjælpemetoder
+    // -------------------------------------------------------------------------
+
+    private void requireRole(String userId, MemberRole... allowed) {
+        GymMember member = gymMemberRepository.findByUserId(UUID.fromString(userId))
+                .orElseThrow(() -> new IllegalStateException("Profil ikke fundet"));
+        for (MemberRole role : allowed) {
+            if (member.getRole() == role) return;
+        }
+        throw new AccessDeniedException("Din rolle (" + member.getRole() + ") har ikke adgang til denne ressource");
+    }
+
+    private GymMemberResponse toMemberResponse(GymMember m) {
+        return new GymMemberResponse(
+                m.getId().toString(),
+                m.getName(),
+                m.getEmail(),
+                m.getPhoneNumber(),
+                m.getAddress(),
+                m.getRole().name(),
+                gymRosterRepository.existsByMemberId(m.getId()),
+                m.getCreatedAt() != null ? m.getCreatedAt().toString() : null
         );
     }
 

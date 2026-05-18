@@ -22,7 +22,7 @@ public class TrainerPokemon {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trainer_id")
-    private Trainer trainer;
+    private GymMember member;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "pokedex_id")

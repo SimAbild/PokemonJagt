@@ -1,9 +1,9 @@
 package com.pokemonjagt.config;
 
-import com.pokemonjagt.filter.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -11,7 +11,6 @@ import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -26,7 +25,7 @@ public class SecurityConfig {
     private String jwkSetUri;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session ->
@@ -35,7 +34,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtFilter, BasicAuthenticationFilter.class)
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
             .cors(cors -> cors.configurationSource(corsConfigurationSource()));
         return http.build();
     }
@@ -62,23 +61,25 @@ public class SecurityConfig {
 /*
  * FORKLARING AF SecurityConfig
  *
- * SecurityFilterChain    - definerer reglerne for alle indkommende requests
- *                          samme mønster som ProjectSecurityConfig i undervisningen
+ * SecurityFilterChain        - definerer reglerne for alle indkommende requests
+ *                              samme mønster som ProjectSecurityConfig i undervisningen
  *
- * csrf.disable()         - vi bruger JWT i header, ikke cookies — CSRF irrelevant
+ * csrf.disable()             - vi bruger JWT i header, ikke cookies — CSRF irrelevant
  *
- * STATELESS              - serveren gemmer ingen session — brugeren sender JWT ved hvert kald
+ * STATELESS                  - serveren gemmer ingen session — brugeren sender JWT ved hvert kald
  *
- * permitAll()            - /api/auth/** er åbent — man har ingen token endnu ved login
- * authenticated()        - alle andre endpoints kræver en gyldig JWT
+ * permitAll()                - /api/auth/** er åbent — man har ingen token endnu ved login
+ * authenticated()            - alle andre endpoints kræver en gyldig JWT
  *
- * addFilterBefore()      - tilføjer vores JwtAuthenticationFilter til filterkæden
- *                          kører FØR BasicAuthenticationFilter — samme princip som i undervisningen
+ * oauth2ResourceServer()     - aktiverer Springs indbyggede BearerTokenAuthenticationFilter
+ *                              den læser "Authorization: Bearer <token>" headeren automatisk,
+ *                              validerer token via jwtDecoder(), og sætter brugeren i SecurityContext
+ *                              — svarer til JWTTokenValidatorFilter fra undervisningen, men gratis
  *
- * jwtDecoder()           - bygger den decoder der validerer Supabase-tokens
- *                          Supabase bruger ES256 (EC-algoritmen) — Spring understøtter kun RS256 som default
- *                          vi specificerer ES256 eksplicit så Nimbus kan finde den rigtige nøgle i JWKS
+ * jwtDecoder()               - bygger den decoder der validerer Supabase-tokens
+ *                              Supabase bruger ES256 (EC-algoritmen) — Spring understøtter kun RS256 som default
+ *                              vi specificerer ES256 eksplicit så Nimbus kan finde den rigtige nøgle i JWKS
  *
- * corsConfigurationSource - tillader browseren at kalde vores API på tværs af domæner/porte
- *                           konfigureres i Security fordi filtrene kører FØR MVC-laget
+ * corsConfigurationSource    - tillader browseren at kalde vores API på tværs af domæner/porte
+ *                              konfigureres i Security fordi filtrene kører FØR MVC-laget
  */

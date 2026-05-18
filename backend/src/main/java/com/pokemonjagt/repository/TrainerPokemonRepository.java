@@ -8,5 +8,7 @@ import java.util.UUID;
 
 public interface TrainerPokemonRepository extends JpaRepository<TrainerPokemon, UUID> {
 
-    List<TrainerPokemon> findByTrainerUserIdOrderByCaughtAtDesc(UUID userId);
+    List<TrainerPokemon> findByMemberUserIdOrderByCaughtAtDesc(UUID userId);
+
+    List<TrainerPokemon> findByMemberIdOrderByCaughtAtDesc(UUID memberId);
 }

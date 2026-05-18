@@ -60,28 +60,6 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- JJWT API: the interface we call to parse and validate JWTs -->
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-            <version>0.12.5</version>
-        </dependency>
-
-        <!-- JJWT implementation: the actual JWT parsing logic (loaded at runtime) -->
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <version>0.12.5</version>
-            <scope>runtime</scope>
-        </dependency>
-
-        <!-- JJWT Jackson: lets JJWT read JWT claims as Java objects via Jackson -->
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.5</version>
-            <scope>runtime</scope>
-        </dependency>
 
     </dependencies>
 
